@@ -119,6 +119,47 @@
                 height: 100vh;
             }
         }
+
+        #virtual-joystick {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 320px;
+            height: 220px;
+            z-index: 10;
+            user-select: none;
+            touch-action: none;
+            opacity: 0.8;
+            display: none;
+            /* 仅在移动端显示 */
+        }
+
+        .vj-row {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        .vj-btn {
+            width: 90px;
+            height: 90px;
+            margin: 0 10px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid #fff;
+            border-radius: 20px;
+            font-size: 48px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s, border 0.2s;
+        }
+
+        .vj-btn.active {
+            background: rgba(76, 175, 80, 0.5);
+            border: 3px solid #4CAF50;
+        }
     </style>
 </head>
 
@@ -141,8 +182,20 @@
             <div id="final-score"></div>
             <button onclick="restartGame()">重新开学</button>
         </div>
+        <div id="virtual-joystick">
+            <div class="vj-row">
+                <div class="vj-btn" data-dir="up">▲</div>
+            </div>
+            <div class="vj-row">
+                <div class="vj-btn" data-dir="left">◀</div>
+                <div class="vj-btn" data-dir="down">▼</div>
+                <div class="vj-btn" data-dir="right">▶</div>
+            </div>
+        </div>
     </div>
     <script>
+        let hpFlashTimer = 0;
+        let vampCooldown = 0;
         const canvas = document.getElementById('game-canvas');
         const ctx = canvas.getContext('2d');
         const W = canvas.width, H = canvas.height;
@@ -167,37 +220,54 @@
                 color: '#4f8ef7',
                 baseDamage: 2,
                 baseFireRate: 16,
-                effect: 'laser',
-                desc: '高数射线，基础伤害，射速适中',
+                type: 'line',
+                desc: '高数射线，直线穿透，基础伤害',
             },
             {
                 key: 'finance',
-                name: '金融子弹',
+                name: '金融散弹',
                 color: '#f7b731',
                 baseDamage: 1,
-                baseFireRate: 8,
-                effect: 'pierce',
-                desc: '金融子弹，穿透敌人，射速快',
+                baseFireRate: 18,
+                type: 'spread',
+                desc: '金融散弹，扇形多发，覆盖面广',
             },
             {
                 key: 'account',
-                name: '会计护盾',
+                name: '会计激光',
                 color: '#2ecc71',
                 baseDamage: 1,
-                baseFireRate: 24,
-                effect: 'shield',
-                desc: '会计护盾，击中回复体力',
+                baseFireRate: 40,
+                type: 'laser',
+                desc: '会计激光，直线持续高伤害',
             },
             {
                 key: 'stat',
-                name: '统计爆裂弹',
+                name: '统计水波',
+                color: '#00bcd4',
+                baseDamage: 1,
+                baseFireRate: 30,
+                type: 'wave',
+                desc: '统计水波，横向大面积低伤害',
+            },
+            {
+                key: 'prob',
+                name: '概率爆裂弹',
                 color: '#e17055',
                 baseDamage: 1,
-                baseFireRate: 20,
-                effect: 'explode',
-                desc: '统计爆裂弹，击中分裂小弹',
+                baseFireRate: 22,
+                type: 'explode',
+                desc: '概率爆裂弹，命中分裂小弹',
             },
-            // 可扩展更多武器
+            {
+                key: 'macro',
+                name: '宏观经济波',
+                color: '#ab47bc',
+                baseDamage: 1,
+                baseFireRate: 50,
+                type: 'bigwave',
+                desc: '宏观经济波，大范围低频攻击',
+            },
         ];
 
         function getWeaponDef(key) {
@@ -211,8 +281,13 @@
             player = {
                 x: W / 2 - 20, y: H - 80, w: 40, h: 40,
                 speed: 3,
-                hp: 3,
+                hp: 10,
+                maxHp: 10,
                 invincible: 0,
+                shield: 0, // 可叠加护盾数量
+                rapid: 0,  // 连射剩余帧数
+                dash: 0,   // 冲刺剩余帧数
+                magnet: false,
                 weapons: [
                     { key: 'math', name: '高数射线', level: 1, damage: 2, fireRate: 16, fireTimer: 0 },
                 ],
@@ -235,46 +310,91 @@
             lastUpgradeChoices = [];
         }
 
+        // 技能与武器图标定义
+        const ICONS = {
+            math: '📏',
+            finance: '💰',
+            account: '💡',
+            stat: '💧',
+            prob: '💥',
+            macro: '🌊',
+            magnet: '🧲',
+            maxhp: '❤️',
+            vamp: '🩸',
+            crit: '⚡',
+            rapid: '🔫',
+            shield: '🛡️',
+            expplus: '📚',
+            heal: '🌱',
+            cooldown: '⏱️',
+            split: '🔀',
+            boom: '💣',
+            dash: '🏃',
+        };
+
         function buildUpgradePool() {
             let pool = [];
             for (const w of WEAPON_DEFS) {
                 pool.push({
                     name: `获得${w.name}`,
                     desc: w.desc,
+                    icon: ICONS[w.key],
                     apply: p => {
                         if (!p.weapons.find(ww => ww.key === w.key)) {
                             p.weapons.push({ key: w.key, name: w.name, level: 1, damage: w.baseDamage, fireRate: w.baseFireRate, fireTimer: 0 });
                         }
-                    }
+                    },
+                    onlyIf: p => !p.weapons.find(ww => ww.key === w.key)
                 });
                 pool.push({
                     name: `${w.name}伤害+1`,
                     desc: `${w.name}伤害提升`,
+                    icon: ICONS[w.key],
                     apply: p => {
                         let weapon = p.weapons.find(ww => ww.key === w.key);
                         if (weapon) weapon.damage++;
-                    }
+                    },
+                    onlyIf: p => !!p.weapons.find(ww => ww.key === w.key)
                 });
                 pool.push({
                     name: `${w.name}射速+1`,
                     desc: `${w.name}射速提升`,
+                    icon: ICONS[w.key],
                     apply: p => {
                         let weapon = p.weapons.find(ww => ww.key === w.key);
                         if (weapon && weapon.fireRate > 4) weapon.fireRate--;
-                    }
+                    },
+                    onlyIf: p => !!p.weapons.find(ww => ww.key === w.key)
+                });
+                // 武器吸血
+                pool.push({
+                    name: `${w.name}吸血`,
+                    desc: `用${w.name}击中敌人时回复1体力（冷却1s）`,
+                    icon: ICONS.vamp,
+                    apply: p => {
+                        let weapon = p.weapons.find(ww => ww.key === w.key);
+                        if (weapon) weapon.vamp = true;
+                    },
+                    onlyIf: p => !!p.weapons.find(ww => ww.key === w.key) && !p.weapons.find(ww => ww.key === w.key).vamp
                 });
             }
-            pool.push({ name: '体能锻炼', desc: '体力+1', apply: p => { p.hp += 1; hp += 1; } });
-            pool.push({ name: '学业加速', desc: '移动速度+0.5', apply: p => p.speed += 0.5 });
-            pool.push({ name: '学霸光环', desc: '升级时体力全满', apply: p => { p.hp = 3; hp = 3; } });
-            pool.push({ name: '选修课', desc: '经验获取+1', apply: p => p.skills.push('expPlus') });
-            pool.push({ name: '社团活动', desc: '升级时额外获得1学分', apply: p => p.skills.push('extraExpOnLevel') });
+            pool.push({ name: '吸铁石', desc: '自动吸取经验球，范围提升', icon: ICONS.magnet, apply: p => { p.magnetRange = (p.magnetRange || 120) + 40; }, onlyIf: () => true });
+            pool.push({ name: '体力上限+1', desc: '最大体力+1', icon: ICONS.maxhp, apply: p => { p.maxHp = (p.maxHp || 3) + 1; }, onlyIf: () => true });
+            pool.push({ name: '暴击', desc: '有10%概率造成双倍伤害', icon: ICONS.crit, apply: p => { p.crit = true; }, onlyIf: p => !p.crit });
+            pool.push({ name: '连射', desc: '短时间内所有武器射速翻倍', icon: ICONS.rapid, apply: p => { p.rapid = 300; }, onlyIf: p => !p.rapid });
+            pool.push({ name: '护盾', desc: '获得一次可抵挡伤害的护盾', icon: ICONS.shield, apply: p => { p.shield = true; }, onlyIf: p => !p.shield });
+            pool.push({ name: '经验加成', desc: '获得经验时额外+1', icon: ICONS.expplus, apply: p => p.skills.push('expPlus'), onlyIf: p => !p.skills.includes('expPlus') });
+            pool.push({ name: '回血光环', desc: '每20秒自动回复1体力', icon: ICONS.heal, apply: p => { p.healAura = true; }, onlyIf: p => !p.healAura });
+            pool.push({ name: '冷却缩短', desc: '所有武器射速永久提升', icon: ICONS.cooldown, apply: p => { for (let w of p.weapons) w.fireRate = Math.max(3, w.fireRate - 2); }, onlyIf: () => true });
+            pool.push({ name: '子弹分裂', desc: '普通子弹击中敌人后分裂为两枚小弹', icon: ICONS.split, apply: p => { p.split = true; }, onlyIf: p => !p.split });
+            pool.push({ name: '范围爆炸', desc: '击杀敌人时造成小范围溅射伤害', icon: ICONS.boom, apply: p => { p.boom = true; }, onlyIf: p => !p.boom });
+            pool.push({ name: '无敌冲刺', desc: '短时间内无敌并提升移动速度', icon: ICONS.dash, apply: p => { p.dash = 180; }, onlyIf: p => !p.dash });
             return pool;
         }
 
         function randomUpgradeChoices(n = 3) {
-            let pool = upgradePool.filter(u => !lastUpgradeChoices.includes(u));
-            if (pool.length < n) pool = upgradePool;
+            let pool = upgradePool.filter(u => u.onlyIf(player) && !lastUpgradeChoices.includes(u));
+            if (pool.length < n) pool = upgradePool.filter(u => u.onlyIf(player));
             let arr = [];
             while (arr.length < n) {
                 let idx = Math.floor(Math.random() * pool.length);
@@ -291,7 +411,7 @@
             choices.forEach(upg => {
                 let div = document.createElement('div');
                 div.className = 'upgrade-option';
-                div.innerHTML = `<b>${upg.name}</b><br><small>${upg.desc}</small>`;
+                div.innerHTML = `<span style="font-size:28px;vertical-align:middle;margin-right:10px;">${upg.icon || '✨'}</span><b>${upg.name}</b><br><small>${upg.desc}</small>`;
                 div.onclick = () => {
                     upg.apply(player);
                     if (player.skills.includes('extraExpOnLevel')) exp++;
@@ -333,7 +453,21 @@
         function updateExp() {
             for (let i = exps.length - 1; i >= 0; i--) {
                 let e = exps[i];
-                e.y += e.v;
+                // 吸铁石吸附逻辑
+                if (player.magnetRange) {
+                    const px = player.x + player.w / 2, py = player.y + player.h / 2;
+                    const dx = px - e.x, dy = py - e.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < player.magnetRange) {
+                        const speed = 6;
+                        e.x += dx / dist * speed;
+                        e.y += dy / dist * speed;
+                    } else {
+                        e.y += e.v;
+                    }
+                } else {
+                    e.y += e.v;
+                }
                 if (Math.abs(e.x + e.r / 2 - player.x - player.w / 2) < player.w / 2 && Math.abs(e.y + e.r / 2 - player.y - player.h / 2) < player.h / 2) {
                     let add = 1;
                     if (player.skills.includes('expPlus')) add++;
@@ -378,25 +512,46 @@
                 w.fireTimer -= delta;
                 if (w.fireTimer <= 0) {
                     let def = getWeaponDef(w.key);
-                    let cnt = 1;
-                    if (def.key === 'finance') cnt = 2; // 金融子弹多发
-                    for (let i = 0; i < cnt; i++) {
-                        let target = null, minDist = 1e9;
-                        for (let e of enemies) {
-                            let d = Math.hypot(e.x + e.w / 2 - player.x - player.w / 2, e.y + e.h / 2 - player.y);
-                            if (d < minDist) { minDist = d; target = e; }
+                    if (def.type === 'line') {
+                        bullets.push({ x: player.x + player.w / 2 - 6, y: player.y - 12, w: 12, h: 24, dx: 0, dy: -8 - w.level, damage: w.damage, color: def.color, effect: 'line', level: w.level, life: 0, owner: w.key, vamp: w.vamp });
+                    } else if (def.type === 'spread') {
+                        let spread = 30 + 5 * w.level;
+                        let cnt = 3 + Math.floor(w.level / 2);
+                        for (let i = 0; i < cnt; i++) {
+                            let angle = (-(cnt - 1) / 2 + i) * spread * Math.PI / 180;
+                            let dx = Math.sin(angle) * 7, dy = -Math.cos(angle) * 7;
+                            bullets.push({ x: player.x + player.w / 2 - 6, y: player.y - 12, w: 12, h: 24, dx, dy, damage: w.damage, color: def.color, effect: 'spread', level: w.level, life: 0, owner: w.key, vamp: w.vamp });
                         }
-                        if (target) {
-                            let tx = target.x + target.w / 2, ty = target.y + target.h / 2;
-                            let angle = Math.atan2(ty - (player.y), tx - (player.x + player.w / 2));
-                            let speed = 6 + w.level;
-                            let dx = Math.cos(angle) * speed;
-                            let dy = Math.sin(angle) * speed;
-                            bullets.push({ x: player.x + player.w / 2 - 8, y: player.y - 8, w: 16, h: 16, dx, dy, damage: w.damage, color: def.color, effect: def.effect, level: w.level, life: 0, pierce: def.effect === 'pierce' ? 2 : 0, owner: w.key });
-                        }
+                    } else if (def.type === 'laser') {
+                        bullets.push({ x: player.x + player.w / 2 - 3, y: 0, w: 6, h: player.y + player.h / 2, dx: 0, dy: 0, damage: w.damage, color: def.color, effect: 'laser', level: w.level, life: 0, owner: w.key, duration: 20 + 5 * w.level, laserEndY: 0, vamp: w.vamp });
+                    } else if (def.type === 'wave') {
+                        bullets.push({ x: player.x + player.w / 2 - 10, y: player.y + player.h / 2 - 10, w: 20, h: 20, dx: 0, dy: 0, damage: w.damage, color: def.color, effect: 'wave', level: w.level, life: 0, owner: w.key, r: 0, _hitList: [], penetrate: w.penetrate || 1, vamp: w.vamp });
+                    } else if (def.type === 'explode') {
+                        bullets.push({ x: player.x + player.w / 2 - 8, y: player.y - 12, w: 16, h: 16, dx: 0, dy: -7 - w.level, damage: w.damage, color: def.color, effect: 'explode', level: w.level, life: 0, owner: w.key, vamp: w.vamp });
+                    } else if (def.type === 'bigwave') {
+                        bullets.push({ x: player.x + player.w / 2 - 10, y: player.y + player.h / 2 - 10, w: 20, h: 20, dx: 0, dy: 0, damage: w.damage, color: def.color, effect: 'bigwave', level: w.level, life: 0, owner: w.key, r: 0, _hitList: [], penetrate: 999, vamp: w.vamp });
                     }
                     w.fireTimer = w.fireRate;
                 }
+            }
+        }
+
+        // 新增：底部书本堆叠城墙
+        function drawBooksWall(flash = false) {
+            const wallH = 36, bookW = 40, bookH = 28;
+            let y = H - wallH;
+            for (let i = 0; i < Math.ceil(W / bookW); i++) {
+                let x = i * bookW;
+                ctx.save();
+                ctx.globalAlpha = flash ? 0.5 + 0.5 * Math.sin(Date.now() / 60) : 1;
+                ctx.fillStyle = i % 2 === 0 ? '#b388ff' : '#ffe082';
+                ctx.fillRect(x, y, bookW - 4, bookH);
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, bookW - 4, bookH);
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(x + 6, y + 6, bookW - 16, bookH - 16);
+                ctx.restore();
             }
         }
 
@@ -415,6 +570,24 @@
                 ctx.fillStyle = 'rgba(76,142,247,0.08)';
                 ctx.beginPath(); ctx.arc(Math.random() * W, Math.random() * H, Math.random() * 2 + 1, 0, 2 * Math.PI); ctx.fill();
             }
+            // 底部书本城墙
+            drawBooksWall(hpFlashTimer > 0);
+            // 波类型攻击（在最底层）
+            for (let b of bullets) {
+                if (b.effect === 'wave' || b.effect === 'bigwave') {
+                    ctx.save();
+                    ctx.strokeStyle = b.color;
+                    ctx.lineWidth = b.effect === 'wave' ? 6 : 12;
+                    ctx.globalAlpha = 0.4;
+                    // 变大的空心圆环
+                    let cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+                    let r = b.r || (b.effect === 'wave' ? W / 2 - 10 : W / 2 - 2);
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
             // 玩家
             ctx.save();
             ctx.beginPath(); ctx.arc(player.x + player.w / 2, player.y + player.h / 2, player.w / 2, 0, 2 * Math.PI); ctx.fillStyle = '#fff'; ctx.fill();
@@ -422,12 +595,37 @@
             ctx.fillStyle = '#2c3e50'; ctx.fillRect(player.x + player.w / 2 - 14, player.y + player.h / 2 - 28, 28, 8);
             ctx.beginPath(); ctx.moveTo(player.x + player.w / 2, player.y + player.h / 2 - 20); ctx.lineTo(player.x + player.w / 2, player.y + player.h / 2 - 10); ctx.stroke();
             ctx.restore();
+            // 玩家血条（支持小数）
+            ctx.save();
+            let barW = player.w, barH = 8;
+            let px = player.x, py = player.y + player.h + 6;
+            ctx.fillStyle = '#ddd';
+            ctx.fillRect(px, py, barW, barH);
+            ctx.fillStyle = '#4caf50';
+            ctx.fillRect(px, py, barW * (player.hp / player.maxHp), barH);
+            ctx.strokeStyle = '#222'; ctx.strokeRect(px, py, barW, barH);
+            ctx.font = '10px Arial';
+            ctx.fillStyle = '#222';
+            ctx.fillText(`${player.hp.toFixed(1)}/${player.maxHp}`, px + 2, py + barH - 1);
+            ctx.restore();
+            // 玩家无敌闪烁
             if (player.invincible > 0) {
                 ctx.globalAlpha = 0.5 + 0.5 * Math.sin(Date.now() / 80);
                 ctx.fillStyle = '#2ecc71';
                 ctx.beginPath(); ctx.arc(player.x + player.w / 2, player.y + player.h / 2, player.w / 2 + 4, 0, 2 * Math.PI); ctx.fill();
                 ctx.globalAlpha = 1;
                 player.invincible--;
+            }
+            // 护盾UI提示
+            if (player.shield > 0) {
+                ctx.save();
+                ctx.globalAlpha = 0.5 + 0.5 * Math.sin(Date.now() / 120);
+                ctx.strokeStyle = '#00bcd4';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(player.x + player.w / 2, player.y + player.h / 2, player.w / 2 + 8, 0, 2 * Math.PI);
+                ctx.stroke();
+                ctx.restore();
             }
             // 玩家移动
             if (gameState === 'playing') {
@@ -442,35 +640,69 @@
             // 子弹
             for (let i = bullets.length - 1; i >= 0; i--) {
                 let b = bullets[i];
-                // 追踪逻辑
-                let target = null, minDist = 1e9;
-                for (let e of enemies) {
-                    let d = Math.hypot(e.x + e.w / 2 - b.x, b.y - (e.y + e.h / 2));
-                    if (d < minDist) { minDist = d; target = e; }
-                }
-                if (target) {
-                    let tx = target.x + target.w / 2, ty = target.y + target.h / 2;
-                    let angle = Math.atan2(ty - b.y, tx - b.x);
-                    let speed = Math.sqrt(b.dx * b.dx + b.dy * b.dy);
-                    b.dx = Math.cos(angle) * speed;
-                    b.dy = Math.sin(angle) * speed;
+                // 波类子弹变大
+                if (b.effect === 'wave' || b.effect === 'bigwave') {
+                    b.r = (b.r || 0) + (b.effect === 'wave' ? 8 : 5) * delta;
+                    if (!b._hitList) b._hitList = [];
+                    if (b.penetrate === undefined) b.penetrate = b.effect === 'wave' ? 1 : 999;
                 }
                 b.x += b.dx * delta;
                 b.y += b.dy * delta;
                 b.life++;
-                // 绘制
-                ctx.save(); ctx.shadowColor = b.color; ctx.shadowBlur = 8; ctx.fillStyle = b.color;
-                ctx.beginPath(); ctx.arc(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, 0, 2 * Math.PI); ctx.fill(); ctx.restore();
+                // 会计激光显示优化
+                if (b.effect === 'laser') {
+                    ctx.save();
+                    ctx.globalAlpha = 0.7;
+                    ctx.shadowColor = '#39ff14';
+                    ctx.shadowBlur = 24;
+                    ctx.strokeStyle = '#39ff14';
+                    ctx.lineWidth = 18;
+                    ctx.beginPath();
+                    ctx.moveTo(b.x + b.w / 2, player.y + player.h / 2);
+                    ctx.lineTo(b.x + b.w / 2, 0);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                    ctx.restore();
+                }
+                // 绘制（非波类、非激光）
+                if (b.effect !== 'wave' && b.effect !== 'bigwave' && b.effect !== 'laser') {
+                    ctx.save(); ctx.shadowColor = b.color; ctx.shadowBlur = 8; ctx.fillStyle = b.color;
+                    ctx.beginPath(); ctx.arc(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, 0, 2 * Math.PI); ctx.fill(); ctx.restore();
+                }
                 // 子弹效果
                 let hit = false;
                 for (let j = enemies.length - 1; j >= 0; j--) {
                     let e = enemies[j];
-                    if (b.x + b.w > e.x && b.x < e.x + e.w && b.y + b.h > e.y && b.y < e.y + e.h) {
+                    if (!e) continue;
+                    // 波类判定
+                    if ((b.effect === 'wave' || b.effect === 'bigwave')) {
+                        let cx = b.x + b.w / 2, cy = b.y + b.h / 2, r = b.r || 0;
+                        let ex = e.x + e.w / 2, ey = e.y + e.h / 2;
+                        let dist = Math.abs(Math.hypot(cx - ex, cy - ey) - r);
+                        if (dist < e.w / 2 + 6 && !b._hitList.includes(j)) {
+                            e.hp -= b.damage;
+                            b._hitList.push(j);
+                            if (b.effect === 'wave') {
+                                b.penetrate--;
+                                if (b.penetrate <= 0) { hit = true; break; }
+                            }
+                        }
+                    } else if (b.x + b.w > e.x && b.x < e.x + e.w && b.y + b.h > e.y && b.y < e.y + e.h) {
+                        // 高数射线分裂
+                        if (b.effect === 'line' && b.split) {
+                            for (let k = 0; k < 2; k++) {
+                                let angle = (k === 0 ? -1 : 1) * Math.PI / 6;
+                                let dx = Math.sin(angle) * 6, dy = -Math.cos(angle) * 6;
+                                bullets.push({ x: b.x + b.w / 2 - 4, y: b.y - 4, w: 8, h: 8, dx, dy, damage: Math.max(1, Math.floor(b.damage / 2)), color: '#b2bec3', effect: 'mini', level: 1, life: 0, pierce: 0, owner: 'mini' });
+                            }
+                        }
+                        // 吸血判定
+                        if (b.vamp && vampCooldown <= 0 && player.hp < player.maxHp) {
+                            player.hp = Math.min(player.maxHp, player.hp + 0.1);
+                            vampCooldown = 60; // 1秒冷却
+                        }
                         e.hp -= b.damage;
-                        if (b.effect === 'pierce' && b.pierce > 0) { b.pierce--; continue; }
-                        if (b.effect === 'shield') { if (hp < player.hp) { hp++; } }
                         if (b.effect === 'explode') {
-                            // 溅射分裂小弹
                             for (let k = 0; k < 3; k++) {
                                 let angle = Math.random() * Math.PI * 2;
                                 let dx = Math.cos(angle) * 4, dy = Math.sin(angle) * 4;
@@ -480,11 +712,26 @@
                         hit = true; break;
                     }
                 }
+                if (b.effect === 'laser') {
+                    // 激光持续时间
+                    b.duration--;
+                    if (b.duration <= 0) hit = true;
+                }
+                if (b.effect === 'wave') {
+                    // 水波消失条件：击中敌人或超大
+                    if ((b.penetrate !== undefined && b.penetrate <= 0) || b.r > Math.max(W, H)) hit = true;
+                }
+                if (b.effect === 'bigwave') {
+                    // 经济波消失条件：最大半径
+                    if (b.r > W * 0.7) hit = true;
+                }
                 if (b.y < -30 || b.x < -30 || b.x > W + 30 || hit || b.life > 120) bullets.splice(i, 1);
             }
+            if (vampCooldown > 0) vampCooldown--;
             // 敌人
             for (let i = enemies.length - 1; i >= 0; i--) {
                 let e = enemies[i];
+                if (!e) continue;
                 e.y += e.speed * delta;
                 if (e.type === 'boss' && Math.random() < 0.03 * delta) {
                     let bx = e.x + e.w / 2 - 8, by = e.y + e.h - 10;
@@ -525,7 +772,13 @@
                     score += e.type === 'boss' ? 200 : 20;
                 } else if (e.y > H + 40) {
                     enemies.splice(i, 1);
-                    hp--;
+                    if (player.shield > 0) {
+                        player.shield--;
+                        // 产生护盾破碎特效
+                    } else if (!player.invincible) {
+                        player.hp--;
+                        player.invincible = 60;
+                    }
                 }
             }
             // 敌人弹幕
@@ -537,7 +790,7 @@
                 ctx.fillRect(b.x, b.y, b.w, b.h);
                 if (b.x + 8 > player.x && b.x < player.x + player.w && b.y + 16 > player.y && b.y < player.y + player.h) {
                     if (player.invincible <= 0) {
-                        hp--;
+                        player.hp--;
                         player.invincible = 60;
                     }
                     enemyBullets.splice(i, 1);
@@ -555,7 +808,7 @@
             levelSpan.textContent = `年级: ${level}`;
             expSpan.textContent = `学分: ${exp}/${expToLevel}`;
             waveSpan.textContent = `学期: ${wave}`;
-            hpSpan.textContent = `体力: ${hp}`;
+            hpSpan.textContent = `体力: ${player.hp.toFixed(1)}/${player.maxHp}`;
             // 粒子
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
@@ -576,11 +829,127 @@
                 }
                 if (score > wave * 200) wave++;
             }
-            if (hp <= 0) {
+            if (player.hp <= 0) {
                 showGameOver();
                 return;
             }
             requestAnimationFrame(gameLoop);
+        }
+
+        // 手机端虚拟方向键
+        function setupMobileControls() {
+            let mc = document.getElementById('mobile-controls');
+            if (!mc) {
+                mc = document.createElement('div');
+                mc.id = 'mobile-controls';
+                mc.style = 'display:none; position:absolute; left:0; bottom:0; width:100%; height:180px; z-index:30; pointer-events:none;';
+                mc.innerHTML = `
+                <div style="position:absolute; left:20px; bottom:20px; width:120px; height:120px;">
+                    <button class="mc-btn" id="btn-left" style="position:absolute; left:0; top:40px;">◀</button>
+                    <button class="mc-btn" id="btn-right" style="position:absolute; left:80px; top:40px;">▶</button>
+                    <button class="mc-btn" id="btn-up" style="position:absolute; left:40px; top:0;">▲</button>
+                    <button class="mc-btn" id="btn-down" style="position:absolute; left:40px; top:80px;">▼</button>
+                </div>`;
+                document.body.appendChild(mc);
+                const style = document.createElement('style');
+                style.innerHTML = `
+                .mc-btn { width: 40px; height: 40px; background: rgba(255,255,255,0.2); border: 2px solid #fff; border-radius: 50%; color: #222; font-size: 22px; margin: 0; pointer-events: auto; outline: none; user-select: none; transition: background 0.2s; }
+                .mc-btn:active { background: #fff; color: #222; }
+                @media (max-width: 700px) { #mobile-controls { display: block !important; } }
+                `;
+                document.head.appendChild(style);
+            }
+            const isMobile = window.innerWidth <= 700;
+            mc.style.display = isMobile ? 'block' : 'none';
+            const map = [
+                ['btn-left', 'ArrowLeft'],
+                ['btn-right', 'ArrowRight'],
+                ['btn-up', 'ArrowUp'],
+                ['btn-down', 'ArrowDown'],
+            ];
+            map.forEach(([id, key]) => {
+                const btn = document.getElementById(id);
+                if (!btn) return;
+                btn.ontouchstart = e => { e.preventDefault(); keys[key] = true; };
+                btn.ontouchend = e => { e.preventDefault(); keys[key] = false; };
+                btn.onmousedown = e => { keys[key] = true; };
+                btn.onmouseup = e => { keys[key] = false; };
+                btn.onmouseleave = e => { keys[key] = false; };
+            });
+            mc.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+        }
+        window.addEventListener('resize', setupMobileControls);
+        window.addEventListener('DOMContentLoaded', setupMobileControls);
+
+        // 判断是否为移动端
+        function isMobile() {
+            return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+        }
+        if (isMobile()) {
+            document.getElementById('virtual-joystick').style.display = 'block';
+        }
+
+        // 虚拟方向键滑动逻辑
+        const vj = document.getElementById('virtual-joystick');
+        const vjBtns = document.querySelectorAll('.vj-btn');
+        let vjActiveDir = null;
+
+        function getDirFromTouch(touch) {
+            for (const btn of vjBtns) {
+                const rect = btn.getBoundingClientRect();
+                if (
+                    touch.clientX >= rect.left &&
+                    touch.clientX <= rect.right &&
+                    touch.clientY >= rect.top &&
+                    touch.clientY <= rect.bottom
+                ) {
+                    return btn.getAttribute('data-dir');
+                }
+            }
+            return null;
+        }
+
+        vj.addEventListener('touchstart', function (e) {
+            const dir = getDirFromTouch(e.touches[0]);
+            if (dir) {
+                vjActiveDir = dir;
+                keys[dirToKey(dir)] = true;
+                updateVjActive();
+            }
+            e.preventDefault();
+        }, { passive: false });
+
+        vj.addEventListener('touchmove', function (e) {
+            const dir = getDirFromTouch(e.touches[0]);
+            if (dir !== vjActiveDir) {
+                if (vjActiveDir) keys[dirToKey(vjActiveDir)] = false;
+                if (dir) keys[dirToKey(dir)] = true;
+                vjActiveDir = dir;
+                updateVjActive();
+            }
+            e.preventDefault();
+        }, { passive: false });
+
+        vj.addEventListener('touchend', function (e) {
+            if (vjActiveDir) keys[dirToKey(vjActiveDir)] = false;
+            vjActiveDir = null;
+            updateVjActive();
+            e.preventDefault();
+        }, { passive: false });
+
+        function dirToKey(dir) {
+            switch (dir) {
+                case 'up': return 'ArrowUp';
+                case 'down': return 'ArrowDown';
+                case 'left': return 'ArrowLeft';
+                case 'right': return 'ArrowRight';
+            }
+        }
+
+        function updateVjActive() {
+            vjBtns.forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-dir') === vjActiveDir);
+            });
         }
 
         resetGame();
