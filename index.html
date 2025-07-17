@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>央财学子闯关记</title>
+    <title>北邮学子闯关记</title>
     <style>
         body {
             margin: 0;
@@ -165,6 +165,25 @@
 
 <body>
     <div id="game-container">
+        <div id="start-panel"
+            style="position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#e3eafc 0%,#fffbe6 100%);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div
+                style="background:#fffbe6;border-radius:18px;padding:36px 32px 28px 32px;box-shadow:0 4px 32px #b0c4de;min-width:320px;text-align:center;">
+                <h1 style="margin-bottom:18px;font-size:2.2em;color:#2c3e50;letter-spacing:2px;">北邮学子闯关记</h1>
+                <div style="font-size:1.2em;margin-bottom:10px;color:#333;font-weight:500;">开泰帅不帅？</div>
+                <div style="font-size:1em;color:#888;margin-bottom:18px;">（答对后可获得三个增益）</div>
+                <div style="margin-bottom:18px;">
+                    <button id="btn-yes"
+                        style="font-size:1.1em;padding:10px 36px;margin-right:24px;background:#4caf50;color:#fff;border:none;border-radius:8px;box-shadow:0 2px 8px #b0c4de;cursor:pointer;transition:background 0.2s;">对</button>
+                    <button id="btn-no"
+                        style="font-size:1.1em;padding:10px 36px;background:#e57373;color:#fff;border:none;border-radius:8px;box-shadow:0 2px 8px #b0c4de;cursor:pointer;transition:background 0.2s;">否</button>
+                </div>
+                <div id="answer-tip" style="font-size:1em;color:#388e3c;height:24px;margin-bottom:18px;"></div>
+                <button id="btn-start"
+                    style="font-size:1.2em;padding:12px 48px;background:#1976d2;color:#fff;border:none;border-radius:10px;box-shadow:0 2px 8px #b0c4de;cursor:pointer;transition:background 0.2s;"
+                    disabled>开始游戏</button>
+            </div>
+        </div>
         <canvas id="game-canvas" width="480" height="700"></canvas>
         <div id="ui">
             <span id="score">绩点: 0</span>
@@ -215,7 +234,7 @@
         // 武器定义
         const WEAPON_DEFS = [
             {
-                key: 'math',
+                key: 'gaoshu',
                 name: '高数射线',
                 color: '#4f8ef7',
                 baseDamage: 2,
@@ -224,49 +243,49 @@
                 desc: '高数射线，直线穿透，基础伤害',
             },
             {
-                key: 'finance',
-                name: '金融散弹',
+                key: 'modian',
+                name: '模电散弹',
                 color: '#f7b731',
                 baseDamage: 1,
                 baseFireRate: 18,
                 type: 'spread',
-                desc: '金融散弹，扇形多发，覆盖面广',
+                desc: '模电散弹，扇形多发，覆盖面广',
             },
             {
-                key: 'account',
-                name: '会计激光',
+                key: 'shudian',
+                name: '数电激光',
                 color: '#2ecc71',
                 baseDamage: 1,
                 baseFireRate: 40,
                 type: 'laser',
-                desc: '会计激光，直线持续高伤害',
+                desc: '数电激光，直线持续高伤害',
             },
             {
-                key: 'stat',
-                name: '统计水波',
+                key: 'xindai',
+                name: '线代水波',
                 color: '#00bcd4',
                 baseDamage: 1,
                 baseFireRate: 30,
                 type: 'wave',
-                desc: '统计水波，横向大面积低伤害',
+                desc: '线代水波，横向大面积低伤害',
             },
             {
-                key: 'prob',
-                name: '概率爆裂弹',
+                key: 'tongyuan',
+                name: '通原爆裂弹',
                 color: '#e17055',
                 baseDamage: 1,
                 baseFireRate: 22,
                 type: 'explode',
-                desc: '概率爆裂弹，命中分裂小弹',
+                desc: '通原爆裂弹，命中分裂小弹',
             },
             {
-                key: 'macro',
-                name: '宏观经济波',
+                key: 'dianbowave',
+                name: '电磁波矩阵',
                 color: '#ab47bc',
                 baseDamage: 1,
                 baseFireRate: 50,
                 type: 'bigwave',
-                desc: '宏观经济波，大范围低频攻击',
+                desc: '电磁波矩阵，大范围低频攻击',
             },
         ];
 
@@ -280,7 +299,7 @@
         function resetGame() {
             player = {
                 x: W / 2 - 20, y: H - 80, w: 40, h: 40,
-                speed: 3,
+                speed: 5, // 移动速度提升
                 hp: 10,
                 maxHp: 10,
                 invincible: 0,
@@ -289,7 +308,7 @@
                 dash: 0,   // 冲刺剩余帧数
                 magnet: false,
                 weapons: [
-                    { key: 'math', name: '高数射线', level: 1, damage: 2, fireRate: 16, fireTimer: 0 },
+                    { key: 'gaoshu', name: '高数射线', level: 1, damage: 2, fireRate: 16, fireTimer: 0 },
                 ],
                 skills: [],
             };
@@ -312,12 +331,12 @@
 
         // 技能与武器图标定义
         const ICONS = {
-            math: '📏',
-            finance: '💰',
-            account: '💡',
-            stat: '💧',
-            prob: '💥',
-            macro: '🌊',
+            gaoshu: '📏',
+            modian: '🔋',
+            shudian: '💡',
+            xindai: '📐',
+            tongyuan: '📡',
+            dianbowave: '🌊',
             magnet: '🧲',
             maxhp: '❤️',
             vamp: '🩸',
@@ -368,7 +387,7 @@
                 });
                 // 武器吸血
                 pool.push({
-                    name: `${w.name}吸血`,
+                    name: `${w.name}吸收能量`,
                     desc: `用${w.name}击中敌人时回复1体力（冷却1s）`,
                     icon: ICONS.vamp,
                     apply: p => {
@@ -431,11 +450,74 @@
             gameState = 'over';
         }
 
+        let preGameBuffCount = 0;
+        const startPanel = document.getElementById('start-panel');
+        const btnYes = document.getElementById('btn-yes');
+        const btnNo = document.getElementById('btn-no');
+        const btnStart = document.getElementById('btn-start');
+        const answerTip = document.getElementById('answer-tip');
+
+        btnYes.onclick = function () {
+            answerTip.textContent = '答对了！开局赠送三次增益选择';
+            preGameBuffCount = 3;
+            btnStart.disabled = false;
+        };
+        btnNo.onclick = function () {
+            answerTip.textContent = '答错了，正常开始游戏';
+            preGameBuffCount = 0;
+            btnStart.disabled = false;
+        };
+        btnStart.onclick = function () {
+            startPanel.style.display = 'none';
+            resetGame();
+            if (preGameBuffCount > 0) {
+                showPreGameBuffs(preGameBuffCount);
+            } else {
+                requestAnimationFrame(gameLoop);
+            }
+        };
+
+        function showPreGameBuffs(n) {
+            if (n <= 0) {
+                upgradePanel.style.display = 'none';
+                gameState = 'playing';
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+            upgradePanel.style.display = 'block';
+            upgradeOptionsDiv.innerHTML = '';
+            let choices = randomUpgradeChoices();
+            choices.forEach(upg => {
+                let div = document.createElement('div');
+                div.className = 'upgrade-option';
+                div.innerHTML = `<span style="font-size:28px;vertical-align:middle;margin-right:10px;">${upg.icon || '✨'}</span><b>${upg.name}</b><br><small>${upg.desc}</small>`;
+                div.onclick = () => {
+                    upg.apply(player);
+                    if (player.skills.includes('extraExpOnLevel')) exp++;
+                    upgradePanel.style.display = 'none';
+                    showPreGameBuffs(n - 1);
+                };
+                upgradeOptionsDiv.appendChild(div);
+            });
+            gameState = 'upgrade';
+        }
+
+        // 游戏结束/重开时重置答题面板
         function restartGame() {
             gameOverDiv.style.display = 'none';
-            resetGame();
-            requestAnimationFrame(gameLoop);
+            startPanel.style.display = 'flex';
+            btnStart.disabled = true;
+            answerTip.textContent = '';
+            preGameBuffCount = 0;
         }
+
+        // 页面加载时只显示开始面板
+        window.addEventListener('DOMContentLoaded', function () {
+            startPanel.style.display = 'flex';
+            btnStart.disabled = true;
+            answerTip.textContent = '';
+            preGameBuffCount = 0;
+        });
 
         // 控制
         let keys = {};
@@ -695,6 +777,9 @@
                                 let dx = Math.sin(angle) * 6, dy = -Math.cos(angle) * 6;
                                 bullets.push({ x: b.x + b.w / 2 - 4, y: b.y - 4, w: 8, h: 8, dx, dy, damage: Math.max(1, Math.floor(b.damage / 2)), color: '#b2bec3', effect: 'mini', level: 1, life: 0, pierce: 0, owner: 'mini' });
                             }
+                            // 不设置hit=true，让主弹继续存在
+                        } else {
+                            hit = true;
                         }
                         // 吸血判定
                         if (b.vamp && vampCooldown <= 0 && player.hp < player.maxHp) {
@@ -709,7 +794,7 @@
                                 bullets.push({ x: e.x + e.w / 2 - 4, y: e.y + e.h / 2 - 4, w: 8, h: 8, dx, dy, damage: Math.max(1, Math.floor(b.damage / 2)), color: '#b2bec3', effect: 'mini', level: 1, life: 0, pierce: 0, owner: 'mini' });
                             }
                         }
-                        hit = true; break;
+                        break;
                     }
                 }
                 if (b.effect === 'laser') {
@@ -835,51 +920,6 @@
             }
             requestAnimationFrame(gameLoop);
         }
-
-        // 手机端虚拟方向键
-        function setupMobileControls() {
-            let mc = document.getElementById('mobile-controls');
-            if (!mc) {
-                mc = document.createElement('div');
-                mc.id = 'mobile-controls';
-                mc.style = 'display:none; position:absolute; left:0; bottom:0; width:100%; height:180px; z-index:30; pointer-events:none;';
-                mc.innerHTML = `
-                <div style="position:absolute; left:20px; bottom:20px; width:120px; height:120px;">
-                    <button class="mc-btn" id="btn-left" style="position:absolute; left:0; top:40px;">◀</button>
-                    <button class="mc-btn" id="btn-right" style="position:absolute; left:80px; top:40px;">▶</button>
-                    <button class="mc-btn" id="btn-up" style="position:absolute; left:40px; top:0;">▲</button>
-                    <button class="mc-btn" id="btn-down" style="position:absolute; left:40px; top:80px;">▼</button>
-                </div>`;
-                document.body.appendChild(mc);
-                const style = document.createElement('style');
-                style.innerHTML = `
-                .mc-btn { width: 40px; height: 40px; background: rgba(255,255,255,0.2); border: 2px solid #fff; border-radius: 50%; color: #222; font-size: 22px; margin: 0; pointer-events: auto; outline: none; user-select: none; transition: background 0.2s; }
-                .mc-btn:active { background: #fff; color: #222; }
-                @media (max-width: 700px) { #mobile-controls { display: block !important; } }
-                `;
-                document.head.appendChild(style);
-            }
-            const isMobile = window.innerWidth <= 700;
-            mc.style.display = isMobile ? 'block' : 'none';
-            const map = [
-                ['btn-left', 'ArrowLeft'],
-                ['btn-right', 'ArrowRight'],
-                ['btn-up', 'ArrowUp'],
-                ['btn-down', 'ArrowDown'],
-            ];
-            map.forEach(([id, key]) => {
-                const btn = document.getElementById(id);
-                if (!btn) return;
-                btn.ontouchstart = e => { e.preventDefault(); keys[key] = true; };
-                btn.ontouchend = e => { e.preventDefault(); keys[key] = false; };
-                btn.onmousedown = e => { keys[key] = true; };
-                btn.onmouseup = e => { keys[key] = false; };
-                btn.onmouseleave = e => { keys[key] = false; };
-            });
-            mc.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
-        }
-        window.addEventListener('resize', setupMobileControls);
-        window.addEventListener('DOMContentLoaded', setupMobileControls);
 
         // 判断是否为移动端
         function isMobile() {
