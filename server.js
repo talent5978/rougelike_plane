@@ -454,7 +454,14 @@ app.get('/leaderboard', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`魔法学院冒险记服务器运行在端口 ${PORT}`);
-    console.log(`访问 http://localhost:${PORT} 开始游戏`);
-});
+
+// 导出app供Vercel使用
+module.exports = app;
+
+// 本地开发时启动服务器
+if (process.env.NODE_ENV !== 'production') {
+    server.listen(PORT, () => {
+        console.log(`魔法学院冒险记服务器运行在端口 ${PORT}`);
+        console.log(`访问 http://localhost:${PORT} 开始游戏`);
+    });
+}
