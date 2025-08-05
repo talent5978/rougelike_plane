@@ -452,7 +452,7 @@
                 <div class="stat-label">金币</div>
                 <div class="stat-value" id="player-gold">100</div>
             </div>
-            <button class="nav-btn" onclick="logout()">退出</button>
+            <button class="nav-btn" onclick="logout()">重新开始</button>
         </div>
     </div>
 
@@ -463,7 +463,7 @@
         <button class="nav-btn" onclick="showSection('inventory')">背包</button>
         <button class="nav-btn" onclick="showSection('skills')">技能</button>
         <button class="nav-btn" onclick="window.location.href='/shop'">商店</button>
-        <button class="nav-btn" onclick="window.location.href='/leaderboard'">排行榜</button>
+        <button class="nav-btn" onclick="window.location.href='/leaderboard'">统计</button>
     </div>
 
     <!-- 主要内容区域 -->
@@ -511,6 +511,9 @@
             <!-- 探索区域 -->
             <div id="explore-section" class="explore-area">
                 <h2 class="explore-title">选择你的对手</h2>
+                <p style="text-align: center; margin-bottom: 20px; opacity: 0.8;">
+                    💡 建议从史莱姆开始，逐步挑战更强的敌人！
+                </p>
                 <div class="monster-list" id="monster-list">
                     <!-- 怪物列表将通过JavaScript动态生成 -->
                 </div>
@@ -587,34 +590,47 @@
     </div>
 
     <script>
-        const API_BASE = '';
         let player = null;
         let gameData = null;
         let battleState = null;
 
+        // 游戏数据
+        const GAME_DATA = {
+            monsters: [
+                { id: 1, name: '史莱姆', level: 1, hp: 30, attack: 8, defense: 2, exp: 15, gold: 10, sprite: '🟢' },
+                { id: 2, name: '哥布林', level: 2, hp: 50, attack: 12, defense: 4, exp: 25, gold: 18, sprite: '👹' },
+                { id: 3, name: '骷髅战士', level: 3, hp: 80, attack: 18, defense: 6, exp: 40, gold: 30, sprite: '💀' },
+                { id: 4, name: '火焰精灵', level: 4, hp: 120, attack: 25, defense: 8, exp: 60, gold: 45, sprite: '🔥' },
+                { id: 5, name: '冰霜巨人', level: 5, hp: 200, attack: 35, defense: 12, exp: 100, gold: 80, sprite: '🧊' },
+                { id: 6, name: '暗影龙', level: 10, hp: 500, attack: 80, defense: 25, exp: 300, gold: 200, sprite: '🐲' }
+            ],
+            items: [
+                { id: 1, name: '生命药水', type: 'potion', effect: 'heal', value: 50, price: 20, description: '恢复50点生命值' },
+                { id: 2, name: '魔法药水', type: 'potion', effect: 'mana', value: 30, price: 25, description: '恢复30点魔法值' },
+                { id: 3, name: '铁剑', type: 'weapon', effect: 'attack', value: 10, price: 100, description: '攻击力+10' },
+                { id: 4, name: '钢铁盔甲', type: 'armor', effect: 'defense', value: 8, price: 120, description: '防御力+8' },
+                { id: 5, name: '魔法杖', type: 'weapon', effect: 'attack', value: 15, price: 200, description: '攻击力+15，魔法伤害' },
+                { id: 6, name: '龙鳞甲', type: 'armor', effect: 'defense', value: 20, price: 500, description: '防御力+20，火焰抗性' }
+            ],
+            skills: [
+                { id: 1, name: '火球术', type: 'attack', manaCost: 10, damage: 25, description: '发射火球攻击敌人' },
+                { id: 2, name: '治疗术', type: 'heal', manaCost: 8, heal: 40, description: '恢复生命值' },
+                { id: 3, name: '冰锥术', type: 'attack', manaCost: 12, damage: 30, description: '发射冰锥，有几率冰冻敌人' },
+                { id: 4, name: '护盾术', type: 'buff', manaCost: 15, defense: 10, duration: 3, description: '提升防御力3回合' }
+            ]
+        };
+
         // 初始化
-        async function init() {
-            const token = localStorage.getItem('token');
-            if (!token) {
+        function init() {
+            const playerData = localStorage.getItem('player');
+            if (!playerData) {
                 window.location.href = '/';
                 return;
             }
 
             try {
-                // 获取玩家数据
-                const playerResponse = await fetch(`${API_BASE}/api/player`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                
-                if (!playerResponse.ok) {
-                    throw new Error('获取玩家数据失败');
-                }
-                
-                player = await playerResponse.json();
-
-                // 获取游戏数据
-                const gameResponse = await fetch(`${API_BASE}/api/gamedata`);
-                gameData = await gameResponse.json();
+                player = JSON.parse(playerData);
+                gameData = GAME_DATA;
 
                 // 更新UI
                 updatePlayerUI();
@@ -625,10 +641,15 @@
             } catch (error) {
                 showMessage('加载游戏数据失败: ' + error.message, 'error');
                 setTimeout(() => {
-                    localStorage.removeItem('token');
+                    localStorage.removeItem('player');
                     window.location.href = '/';
                 }, 2000);
             }
+        }
+
+        // 保存玩家数据到本地存储
+        function savePlayer() {
+            localStorage.setItem('player', JSON.stringify(player));
         }
 
         // 更新玩家UI
@@ -759,29 +780,32 @@
         }
 
         // 开始战斗
-        async function startBattle(monsterId) {
-            try {
-                const response = await fetch(`${API_BASE}/api/battle/start`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({ monsterId })
-                });
-
-                const data = await response.json();
-                if (response.ok) {
-                    battleState = data.battleState;
-                    showBattleScreen();
-                    updateBattleUI();
-                    showMessage('战斗开始！', 'success');
-                } else {
-                    showMessage(data.error, 'error');
-                }
-            } catch (error) {
-                showMessage('开始战斗失败', 'error');
+        function startBattle(monsterId) {
+            const monster = gameData.monsters.find(m => m.id === monsterId);
+            
+            if (!monster) {
+                showMessage('怪物不存在', 'error');
+                return;
             }
+            
+            battleState = {
+                monster: { ...monster, currentHp: monster.hp },
+                player: {
+                    hp: player.hp,
+                    mana: player.mana,
+                    attack: player.attack,
+                    defense: player.defense
+                },
+                turn: 'player',
+                round: 1
+            };
+            
+            player.battleState = battleState;
+            savePlayer();
+            
+            showBattleScreen();
+            updateBattleUI();
+            showMessage('战斗开始！', 'success');
         }
 
         // 显示战斗界面
@@ -804,48 +828,129 @@
         }
 
         // 战斗行动
-        async function battleAction(action, skillId = null) {
+        function battleAction(action, skillId = null) {
             if (!battleState) return;
 
-            try {
-                const response = await fetch(`${API_BASE}/api/battle/action`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({ action, skillId })
-                });
-
-                const data = await response.json();
-                if (response.ok) {
-                    battleState = data.battleState;
-                    player.hp = battleState.player.hp;
-                    player.mana = battleState.player.mana;
+            let result = { message: '', gameOver: false, victory: false };
+            
+            if (action === 'attack') {
+                const damage = Math.max(1, player.attack - battleState.monster.defense + Math.floor(Math.random() * 10) - 5);
+                battleState.monster.currentHp -= damage;
+                result.message = `你对${battleState.monster.name}造成了${damage}点伤害！`;
+                player.stats.totalDamageDealt += damage;
+                
+                if (battleState.monster.currentHp <= 0) {
+                    // 胜利
+                    const expGain = battleState.monster.exp;
+                    const goldGain = battleState.monster.gold;
+                    player.exp += expGain;
+                    player.gold += goldGain;
+                    player.stats.monstersKilled++;
+                    player.stats.totalGoldEarned += goldGain;
                     
-                    document.getElementById('battle-status').textContent = data.message;
-                    updateBattleUI();
-
-                    if (data.gameOver) {
-                        setTimeout(() => {
-                            if (data.victory) {
-                                showMessage('战斗胜利！', 'success');
-                            } else {
-                                showMessage('战斗失败！', 'error');
-                            }
-                            endBattle();
-                            // 重新获取玩家数据以更新等级等信息
-                            refreshPlayerData();
-                        }, 2000);
+                    // 检查升级
+                    if (player.exp >= player.expToNext) {
+                        player.level++;
+                        player.exp -= player.expToNext;
+                        player.expToNext = Math.floor(player.expToNext * 1.5);
+                        player.maxHp += 20;
+                        player.maxMana += 10;
+                        player.attack += 3;
+                        player.defense += 2;
+                        player.hp = player.maxHp;
+                        player.mana = player.maxMana;
+                        result.message += ` 你获得了${expGain}经验和${goldGain}金币！恭喜升级到${player.level}级！`;
+                    } else {
+                        result.message += ` 你获得了${expGain}经验和${goldGain}金币！`;
                     }
-
-                    document.getElementById('skill-menu').classList.add('hidden');
-                } else {
-                    showMessage(data.error, 'error');
+                    
+                    player.battleState = null;
+                    result.gameOver = true;
+                    result.victory = true;
                 }
-            } catch (error) {
-                showMessage('战斗行动失败', 'error');
+            } else if (action === 'skill' && skillId) {
+                const skill = gameData.skills.find(s => s.id === skillId);
+                if (skill && player.skills.includes(skillId) && player.mana >= skill.manaCost) {
+                    player.mana -= skill.manaCost;
+                    
+                    if (skill.type === 'attack') {
+                        const damage = skill.damage + Math.floor(Math.random() * 10) - 5;
+                        battleState.monster.currentHp -= damage;
+                        result.message = `你使用${skill.name}对${battleState.monster.name}造成了${damage}点伤害！`;
+                        player.stats.totalDamageDealt += damage;
+                        
+                        if (battleState.monster.currentHp <= 0) {
+                            const expGain = battleState.monster.exp;
+                            const goldGain = battleState.monster.gold;
+                            player.exp += expGain;
+                            player.gold += goldGain;
+                            player.stats.monstersKilled++;
+                            player.stats.totalGoldEarned += goldGain;
+                            
+                            if (player.exp >= player.expToNext) {
+                                player.level++;
+                                player.exp -= player.expToNext;
+                                player.expToNext = Math.floor(player.expToNext * 1.5);
+                                player.maxHp += 20;
+                                player.maxMana += 10;
+                                player.attack += 3;
+                                player.defense += 2;
+                                player.hp = player.maxHp;
+                                player.mana = player.maxMana;
+                                result.message += ` 你获得了${expGain}经验和${goldGain}金币！恭喜升级到${player.level}级！`;
+                            } else {
+                                result.message += ` 你获得了${expGain}经验和${goldGain}金币！`;
+                            }
+                            
+                            player.battleState = null;
+                            result.gameOver = true;
+                            result.victory = true;
+                        }
+                    } else if (skill.type === 'heal') {
+                        const healAmount = Math.min(skill.heal, player.maxHp - player.hp);
+                        player.hp += healAmount;
+                        result.message = `你使用${skill.name}恢复了${healAmount}点生命值！`;
+                    }
+                } else {
+                    showMessage('无法使用该技能', 'error');
+                    return;
+                }
             }
+            
+            // 怪物回合
+            if (!result.gameOver && battleState.monster.currentHp > 0) {
+                const monsterDamage = Math.max(1, battleState.monster.attack - player.defense + Math.floor(Math.random() * 6) - 3);
+                player.hp -= monsterDamage;
+                result.message += ` ${battleState.monster.name}对你造成了${monsterDamage}点伤害！`;
+                
+                if (player.hp <= 0) {
+                    player.hp = 0;
+                    player.battleState = null;
+                    result.message += ' 你被击败了！';
+                    result.gameOver = true;
+                    result.victory = false;
+                }
+            }
+            
+            battleState.round++;
+            
+            // 更新UI
+            document.getElementById('battle-status').textContent = result.message;
+            updateBattleUI();
+            savePlayer();
+
+            if (result.gameOver) {
+                setTimeout(() => {
+                    if (result.victory) {
+                        showMessage('战斗胜利！', 'success');
+                    } else {
+                        showMessage('战斗失败！', 'error');
+                    }
+                    endBattle();
+                }, 2000);
+            }
+
+            document.getElementById('skill-menu').classList.add('hidden');
         }
 
         // 显示技能菜单
@@ -881,47 +986,39 @@
         }
 
         // 使用物品
-        async function useItem(itemId) {
-            try {
-                const response = await fetch(`${API_BASE}/api/inventory/use`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({ itemId })
-                });
-
-                const data = await response.json();
-                if (response.ok) {
-                    player = data.player;
-                    updatePlayerUI();
-                    loadInventory();
-                    showMessage(data.message, 'success');
-                } else {
-                    showMessage(data.error, 'error');
-                }
-            } catch (error) {
-                showMessage('使用物品失败', 'error');
+        function useItem(itemId) {
+            const item = gameData.items.find(i => i.id === itemId);
+            const inventoryItem = player.inventory.find(i => i.id === itemId);
+            
+            if (!item || !inventoryItem || inventoryItem.count <= 0) {
+                showMessage('物品不存在或数量不足', 'error');
+                return;
             }
+            
+            let message = '';
+            
+            if (item.effect === 'heal') {
+                const healAmount = Math.min(item.value, player.maxHp - player.hp);
+                player.hp += healAmount;
+                message = `使用${item.name}，恢复了${healAmount}点生命值`;
+            } else if (item.effect === 'mana') {
+                const manaAmount = Math.min(item.value, player.maxMana - player.mana);
+                player.mana += manaAmount;
+                message = `使用${item.name}，恢复了${manaAmount}点魔法值`;
+            }
+            
+            inventoryItem.count--;
+            if (inventoryItem.count <= 0) {
+                player.inventory = player.inventory.filter(i => i.id !== itemId);
+            }
+            
+            updatePlayerUI();
+            loadInventory();
+            savePlayer();
+            showMessage(message, 'success');
         }
 
-        // 刷新玩家数据
-        async function refreshPlayerData() {
-            try {
-                const response = await fetch(`${API_BASE}/api/player`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                });
-                
-                if (response.ok) {
-                    player = await response.json();
-                    updatePlayerUI();
-                    loadInventory();
-                }
-            } catch (error) {
-                console.error('刷新玩家数据失败:', error);
-            }
-        }
+
 
         // 显示消息
         function showMessage(message, type = 'success') {
@@ -938,11 +1035,12 @@
             }, 3000);
         }
 
-        // 退出登录
+        // 重新开始游戏
         function logout() {
-            localStorage.removeItem('token');
-            localStorage.removeItem('player');
-            window.location.href = '/';
+            if (confirm('确定要重新开始游戏吗？当前进度将会丢失！')) {
+                localStorage.removeItem('player');
+                window.location.href = '/';
+            }
         }
 
         // 页面加载时初始化

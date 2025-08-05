@@ -212,34 +212,15 @@
         <h1 class="title">魔法学院冒险记</h1>
         <p class="subtitle">踏上奇幻的冒险之旅</p>
 
-        <div id="login-form" class="form-container">
+        <div id="start-form" class="form-container">
             <div class="form-group">
-                <label for="login-username">用户名</label>
-                <input type="text" id="login-username" placeholder="请输入用户名" required>
+                <label for="player-name">角色名称</label>
+                <input type="text" id="player-name" placeholder="请输入你的魔法师名字" required maxlength="10">
             </div>
-            <div class="form-group">
-                <label for="login-password">密码</label>
-                <input type="password" id="login-password" placeholder="请输入密码" required>
-            </div>
-            <button class="btn" onclick="login()">登录游戏</button>
-            <div class="toggle-form" onclick="toggleForm()">没有账号？点击注册</div>
-        </div>
-
-        <div id="register-form" class="form-container hidden">
-            <div class="form-group">
-                <label for="register-username">用户名</label>
-                <input type="text" id="register-username" placeholder="请输入用户名" required>
-            </div>
-            <div class="form-group">
-                <label for="register-password">密码</label>
-                <input type="password" id="register-password" placeholder="请输入密码" required>
-            </div>
-            <div class="form-group">
-                <label for="confirm-password">确认密码</label>
-                <input type="password" id="confirm-password" placeholder="请确认密码" required>
-            </div>
-            <button class="btn" onclick="register()">创建角色</button>
-            <div class="toggle-form" onclick="toggleForm()">已有账号？点击登录</div>
+            <button class="btn" onclick="startGame()">开始冒险</button>
+            <p style="margin-top: 15px; opacity: 0.8; font-size: 0.9em;">
+                💡 提示：无需注册，直接开始游戏！
+            </p>
         </div>
 
         <div class="loading">
@@ -264,18 +245,6 @@
     </div>
 
     <script>
-        const API_BASE = '';
-
-        function toggleForm() {
-            const loginForm = document.getElementById('login-form');
-            const registerForm = document.getElementById('register-form');
-            
-            loginForm.classList.toggle('hidden');
-            registerForm.classList.toggle('hidden');
-            
-            clearMessages();
-        }
-
         function showLoading() {
             document.querySelector('.loading').style.display = 'block';
         }
@@ -303,142 +272,88 @@
             document.getElementById('success-message').style.display = 'none';
         }
 
-        async function login() {
-            const username = document.getElementById('login-username').value.trim();
-            const password = document.getElementById('login-password').value;
+        // 创建默认玩家数据
+        function createPlayer(name) {
+            return {
+                username: name,
+                level: 1,
+                exp: 0,
+                expToNext: 100,
+                hp: 100,
+                maxHp: 100,
+                mana: 50,
+                maxMana: 50,
+                attack: 10,
+                defense: 5,
+                gold: 100,
+                inventory: [
+                    { id: 1, count: 5 }, // 5个生命药水
+                    { id: 2, count: 3 }  // 3个魔法药水
+                ],
+                equipment: {
+                    weapon: null,
+                    armor: null
+                },
+                skills: [1, 2], // 默认技能：火球术和治疗术
+                achievements: [],
+                stats: {
+                    monstersKilled: 0,
+                    questsCompleted: 0,
+                    totalDamageDealt: 0,
+                    totalGoldEarned: 0
+                },
+                battleState: null,
+                createdAt: new Date(),
+                lastLogin: new Date()
+            };
+        }
 
-            if (!username || !password) {
-                showError('请填写完整的登录信息');
+        function startGame() {
+            const playerName = document.getElementById('player-name').value.trim();
+
+            if (!playerName) {
+                showError('请输入你的魔法师名字');
+                return;
+            }
+
+            if (playerName.length > 10) {
+                showError('名字太长了，请控制在10个字符以内');
                 return;
             }
 
             showLoading();
             clearMessages();
 
-            try {
-                const response = await fetch(`${API_BASE}/api/login`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ username, password })
-                });
+            // 创建玩家数据并保存到本地存储
+            const player = createPlayer(playerName);
+            localStorage.setItem('player', JSON.stringify(player));
+            
+            showSuccess('欢迎来到魔法学院！正在进入游戏...');
+            
+            setTimeout(() => {
+                window.location.href = '/game';
+            }, 1500);
+        }
 
-                const data = await response.json();
-
-                if (response.ok) {
-                    localStorage.setItem('token', data.token);
-                    localStorage.setItem('player', JSON.stringify(data.player));
-                    showSuccess('登录成功！正在进入游戏...');
-                    
-                    setTimeout(() => {
-                        window.location.href = '/game';
-                    }, 1500);
-                } else {
-                    showError(data.error || '登录失败');
-                }
-            } catch (error) {
-                showError('网络连接失败，请稍后重试');
-            } finally {
-                hideLoading();
+        // 检查是否已有游戏数据
+        function checkExistingGame() {
+            const player = localStorage.getItem('player');
+            if (player) {
+                const playerData = JSON.parse(player);
+                document.getElementById('player-name').value = playerData.username;
+                showSuccess(`欢迎回来，${playerData.username}！`);
             }
         }
 
-        async function register() {
-            const username = document.getElementById('register-username').value.trim();
-            const password = document.getElementById('register-password').value;
-            const confirmPassword = document.getElementById('confirm-password').value;
-
-            if (!username || !password || !confirmPassword) {
-                showError('请填写完整的注册信息');
-                return;
-            }
-
-            if (username.length < 3 || username.length > 20) {
-                showError('用户名长度应在3-20字符之间');
-                return;
-            }
-
-            if (password.length < 6) {
-                showError('密码长度至少6位');
-                return;
-            }
-
-            if (password !== confirmPassword) {
-                showError('两次输入的密码不一致');
-                return;
-            }
-
-            showLoading();
-            clearMessages();
-
-            try {
-                const response = await fetch(`${API_BASE}/api/register`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ username, password })
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    localStorage.setItem('token', data.token);
-                    localStorage.setItem('player', JSON.stringify(data.player));
-                    showSuccess('注册成功！欢迎来到魔法学院！');
-                    
-                    setTimeout(() => {
-                        window.location.href = '/game';
-                    }, 1500);
-                } else {
-                    showError(data.error || '注册失败');
-                }
-            } catch (error) {
-                showError('网络连接失败，请稍后重试');
-            } finally {
-                hideLoading();
-            }
-        }
-
-        // 检查是否已登录
-        function checkLogin() {
-            const token = localStorage.getItem('token');
-            if (token) {
-                // 验证token是否有效
-                fetch(`${API_BASE}/api/player`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                }).then(response => {
-                    if (response.ok) {
-                        window.location.href = '/game';
-                    } else {
-                        localStorage.removeItem('token');
-                        localStorage.removeItem('player');
-                    }
-                }).catch(() => {
-                    // 网络错误，继续显示登录界面
-                });
-            }
-        }
-
-        // 回车键登录
+        // 回车键开始游戏
         document.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
-                const loginForm = document.getElementById('login-form');
-                const registerForm = document.getElementById('register-form');
-                
-                if (!loginForm.classList.contains('hidden')) {
-                    login();
-                } else if (!registerForm.classList.contains('hidden')) {
-                    register();
-                }
+                startGame();
             }
         });
 
-        // 页面加载时检查登录状态
-        checkLogin();
+        // 页面加载时检查现有游戏
+        window.addEventListener('load', checkExistingGame);
     </script>
 </body>
 </html>

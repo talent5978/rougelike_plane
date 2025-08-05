@@ -276,33 +276,33 @@
     </div>
 
     <div class="container">
-        <h1 class="leaderboard-title">魔法学院排行榜</h1>
-        <p class="leaderboard-subtitle">⚡ 展示最强大的魔法师们！</p>
+        <h1 class="leaderboard-title">个人统计面板</h1>
+        <p class="leaderboard-subtitle">⚡ 查看你的冒险成就和数据统计！</p>
 
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-icon">👥</div>
-                <div class="stat-title">注册玩家</div>
-                <div class="stat-value" id="total-players">-</div>
-            </div>
-            <div class="stat-card">
                 <div class="stat-icon">⚔️</div>
-                <div class="stat-title">最高等级</div>
-                <div class="stat-value" id="max-level">-</div>
+                <div class="stat-title">当前等级</div>
+                <div class="stat-value" id="current-level">-</div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon">💰</div>
-                <div class="stat-title">最富有者</div>
-                <div class="stat-value" id="max-gold">-</div>
+                <div class="stat-title">拥有金币</div>
+                <div class="stat-value" id="current-gold">-</div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon">💀</div>
-                <div class="stat-title">击杀之王</div>
-                <div class="stat-value" id="max-kills">-</div>
+                <div class="stat-title">击败怪物</div>
+                <div class="stat-value" id="current-kills">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-title">总伤害</div>
+                <div class="stat-value" id="current-damage">-</div>
             </div>
         </div>
 
-        <button class="refresh-btn" onclick="loadLeaderboard()">🔄 刷新排行榜</button>
+        <button class="refresh-btn" onclick="loadLeaderboard()">🔄 刷新统计</button>
 
         <div id="loading" class="loading">
             <div class="spinner"></div>
@@ -311,129 +311,132 @@
 
         <div id="leaderboard-container" class="leaderboard-table" style="display: none;">
             <div class="table-header">
-                <div>排名</div>
-                <div>玩家</div>
-                <div>等级</div>
-                <div class="gold-col">金币</div>
-                <div class="kills-col">击杀</div>
+                <div>图标</div>
+                <div>统计项目</div>
+                <div>当前数值</div>
+                <div class="gold-col">详细信息</div>
+                <div class="kills-col">序号</div>
             </div>
             <div id="leaderboard-rows">
-                <!-- 排行榜数据将通过JavaScript动态生成 -->
+                <!-- 统计数据将通过JavaScript动态生成 -->
             </div>
         </div>
 
         <div id="empty-state" class="empty-state" style="display: none;">
             <div class="empty-state-icon">🏰</div>
-            <p>还没有玩家数据</p>
-            <p>成为第一个登上排行榜的魔法师吧！</p>
+            <p>还没有游戏数据</p>
+            <p>开始你的魔法冒险之旅吧！</p>
         </div>
     </div>
 
     <script>
-        const API_BASE = '';
+        let player = null;
 
         // 初始化
-        async function init() {
-            await loadLeaderboard();
+        function init() {
+            loadLeaderboard();
         }
 
-        // 加载排行榜
-        async function loadLeaderboard() {
+        // 加载排行榜（显示个人统计）
+        function loadLeaderboard() {
             document.getElementById('loading').style.display = 'block';
             document.getElementById('leaderboard-container').style.display = 'none';
             document.getElementById('empty-state').style.display = 'none';
 
-            try {
-                const response = await fetch(`${API_BASE}/api/leaderboard`);
-                const players = await response.json();
+            const playerData = localStorage.getItem('player');
+            if (!playerData) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('empty-state').style.display = 'block';
+                return;
+            }
 
-                if (players.length === 0) {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('empty-state').style.display = 'block';
-                    return;
-                }
+            try {
+                player = JSON.parse(playerData);
 
                 // 更新统计信息
-                updateStats(players);
+                updateStats();
 
-                // 渲染排行榜
-                renderLeaderboard(players);
+                // 渲染个人排行榜
+                renderPersonalStats();
 
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('leaderboard-container').style.display = 'block';
 
             } catch (error) {
-                console.error('加载排行榜失败:', error);
+                console.error('加载统计失败:', error);
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('empty-state').style.display = 'block';
             }
         }
 
         // 更新统计信息
-        function updateStats(players) {
-            document.getElementById('total-players').textContent = players.length;
-            
-            if (players.length > 0) {
-                const maxLevel = Math.max(...players.map(p => p.level));
-                const maxGold = Math.max(...players.map(p => p.gold));
-                const maxKills = Math.max(...players.map(p => p.monstersKilled));
-
-                document.getElementById('max-level').textContent = maxLevel;
-                document.getElementById('max-gold').textContent = maxGold.toLocaleString();
-                document.getElementById('max-kills').textContent = maxKills;
-            }
+        function updateStats() {
+            document.getElementById('current-level').textContent = player.level;
+            document.getElementById('current-gold').textContent = player.gold.toLocaleString();
+            document.getElementById('current-kills').textContent = player.stats.monstersKilled;
+            document.getElementById('current-damage').textContent = player.stats.totalDamageDealt.toLocaleString();
         }
 
-        // 渲染排行榜
-        function renderLeaderboard(players) {
+        // 渲染个人统计
+        function renderPersonalStats() {
             const container = document.getElementById('leaderboard-rows');
             container.innerHTML = '';
 
-            players.forEach((player, index) => {
+            // 创建个人成就列表
+            const achievements = [
+                {
+                    title: '魔法师等级',
+                    value: `${player.level} 级`,
+                    icon: '⚔️',
+                    desc: `经验值: ${player.exp}/${player.expToNext}`
+                },
+                {
+                    title: '财富积累',
+                    value: `${player.gold} 金币`,
+                    icon: '💰',
+                    desc: `总获得: ${player.stats.totalGoldEarned} 金币`
+                },
+                {
+                    title: '战斗统计',
+                    value: `${player.stats.monstersKilled} 只怪物`,
+                    icon: '💀',
+                    desc: `总伤害: ${player.stats.totalDamageDealt} 点`
+                },
+                {
+                    title: '角色属性',
+                    value: `攻击 ${player.attack} / 防御 ${player.defense}`,
+                    icon: '🛡️',
+                    desc: `生命: ${Math.floor(player.hp)}/${player.maxHp} | 魔法: ${Math.floor(player.mana)}/${player.maxMana}`
+                },
+                {
+                    title: '背包物品',
+                    value: `${player.inventory.length} 种物品`,
+                    icon: '🎒',
+                    desc: `总数量: ${player.inventory.reduce((sum, item) => sum + item.count, 0)} 个`
+                }
+            ];
+
+            achievements.forEach((achievement, index) => {
                 const row = document.createElement('div');
                 row.className = 'table-row';
-
-                const rank = index + 1;
-                let rankClass = '';
-                let crown = '';
-
-                if (rank === 1) {
-                    rankClass = 'gold';
-                    crown = '👑';
-                } else if (rank === 2) {
-                    rankClass = 'silver';
-                    crown = '🥈';
-                } else if (rank === 3) {
-                    rankClass = 'bronze';
-                    crown = '🥉';
-                }
-
+                row.style.gridTemplateColumns = '60px 1fr 1fr 1fr 1fr';
+                
                 row.innerHTML = `
-                    <div class="rank ${rankClass}">
-                        <span class="crown">${crown}</span>${rank}
+                    <div class="rank">
+                        <span style="font-size: 1.5em;">${achievement.icon}</span>
                     </div>
-                    <div class="player-name">${player.username}</div>
-                    <div class="player-level">${player.level}</div>
-                    <div class="player-gold">${player.gold.toLocaleString()}</div>
-                    <div class="player-kills">${player.monstersKilled}</div>
+                    <div class="player-name">${achievement.title}</div>
+                    <div class="player-level">${achievement.value}</div>
+                    <div class="player-gold" style="font-size: 0.9em; color: #bdc3c7;">${achievement.desc}</div>
+                    <div class="player-kills">${index + 1}</div>
                 `;
-
-                // 如果是当前玩家，高亮显示
-                const currentPlayer = JSON.parse(localStorage.getItem('player') || '{}');
-                if (player.username === currentPlayer.username) {
-                    row.style.background = 'rgba(52, 152, 219, 0.2)';
-                    row.style.border = '2px solid #3498db';
-                }
-
+                
                 container.appendChild(row);
             });
         }
 
         // 页面加载时初始化
         window.addEventListener('load', init);
-
-        // 每30秒自动刷新一次
-        setInterval(loadLeaderboard, 30000);
     </script>
 </body>
 </html>

@@ -385,34 +385,33 @@
     </div>
 
     <script>
-        const API_BASE = '';
         let player = null;
         let gameData = null;
         let currentCategory = 'all';
 
+        // 游戏数据
+        const GAME_DATA = {
+            items: [
+                { id: 1, name: '生命药水', type: 'potion', effect: 'heal', value: 50, price: 20, description: '恢复50点生命值' },
+                { id: 2, name: '魔法药水', type: 'potion', effect: 'mana', value: 30, price: 25, description: '恢复30点魔法值' },
+                { id: 3, name: '铁剑', type: 'weapon', effect: 'attack', value: 10, price: 100, description: '攻击力+10' },
+                { id: 4, name: '钢铁盔甲', type: 'armor', effect: 'defense', value: 8, price: 120, description: '防御力+8' },
+                { id: 5, name: '魔法杖', type: 'weapon', effect: 'attack', value: 15, price: 200, description: '攻击力+15，魔法伤害' },
+                { id: 6, name: '龙鳞甲', type: 'armor', effect: 'defense', value: 20, price: 500, description: '防御力+20，火焰抗性' }
+            ]
+        };
+
         // 初始化
-        async function init() {
-            const token = localStorage.getItem('token');
-            if (!token) {
+        function init() {
+            const playerData = localStorage.getItem('player');
+            if (!playerData) {
                 window.location.href = '/';
                 return;
             }
 
             try {
-                // 获取玩家数据
-                const playerResponse = await fetch(`${API_BASE}/api/player`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                
-                if (!playerResponse.ok) {
-                    throw new Error('获取玩家数据失败');
-                }
-                
-                player = await playerResponse.json();
-
-                // 获取游戏数据
-                const gameResponse = await fetch(`${API_BASE}/api/gamedata`);
-                gameData = await gameResponse.json();
+                player = JSON.parse(playerData);
+                gameData = GAME_DATA;
 
                 // 更新UI
                 updatePlayerUI();
@@ -427,6 +426,11 @@
                     window.location.href = '/game';
                 }, 2000);
             }
+        }
+
+        // 保存玩家数据
+        function savePlayer() {
+            localStorage.setItem('player', JSON.stringify(player));
         }
 
         // 更新玩家UI
@@ -557,7 +561,7 @@
         }
 
         // 购买物品
-        async function buyItem(itemId) {
+        function buyItem(itemId) {
             const item = gameData.items.find(i => i.id === itemId);
             if (!item) return;
 
@@ -573,28 +577,19 @@
                 return;
             }
 
-            try {
-                const response = await fetch(`${API_BASE}/api/shop/buy`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({ itemId, quantity })
-                });
-
-                const data = await response.json();
-                if (response.ok) {
-                    player = data.player;
-                    updatePlayerUI();
-                    loadShopItems(); // 重新加载以更新按钮状态
-                    showMessage(data.message, 'success');
-                } else {
-                    showMessage(data.error, 'error');
-                }
-            } catch (error) {
-                showMessage('购买失败，请稍后重试', 'error');
+            player.gold -= totalCost;
+            
+            const existingItem = player.inventory.find(i => i.id === itemId);
+            if (existingItem) {
+                existingItem.count += quantity;
+            } else {
+                player.inventory.push({ id: itemId, count: quantity });
             }
+            
+            updatePlayerUI();
+            loadShopItems(); // 重新加载以更新按钮状态
+            savePlayer();
+            showMessage(`购买了${quantity}个${item.name}`, 'success');
         }
 
         // 显示消息
