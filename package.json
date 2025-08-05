@@ -2,14 +2,14 @@
   "name": "magic-academy-adventure",
   "version": "1.0.0",
   "description": "魔法学院冒险记 - 一个完整的RPG游戏",
-  "main": "server.js",
+  "main": "api/index.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "build": "echo 'Build complete'"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "socket.io": "^4.7.2",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "cors": "^2.8.5",
@@ -20,5 +20,8 @@
   },
   "keywords": ["game", "rpg", "adventure", "magic"],
   "author": "Game Developer",
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.x"
+  }
 }
